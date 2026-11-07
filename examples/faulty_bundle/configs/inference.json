@@ -1,0 +1,62 @@
+{
+  "imports": [
+    "$import glob"
+  ],
+  "image_key": "image",
+  "preprocessing": {
+    "_target_": "Compose",
+    "transforms": [
+      {
+        "_target_": "LoadImaged",
+        "keys": "@image_key"
+      },
+      {
+        "_target_": "AddChanneld",
+        "keys": "@image_key"
+      },
+      {
+        "_target_": "Orientationd",
+        "keys": "@image_key",
+        "axcodes": "LPS"
+      },
+      {
+        "_target_": "Spacingd",
+        "keys": "@image_key",
+        "pixdim": [
+          1.5,
+          1.5,
+          2.0
+        ]
+      },
+      {
+        "_target_": "ScaleIntensityRanged",
+        "keys": "@image_key",
+        "a_min": -57,
+        "a_max": 164,
+        "b_min": 0,
+        "b_max": 1,
+        "clip": true
+      }
+    ]
+  },
+  "postprocessing": {
+    "_target_": "Compose",
+    "transforms": [
+      {
+        "_target_": "Activationsd",
+        "keys": "pred",
+        "softmax": true
+      },
+      {
+        "_target_": "AsDiscreted",
+        "keys": "pred",
+        "argmax": true
+      },
+      {
+        "_target_": "SaveImaged",
+        "keys": "pred",
+        "output_dir": "$@bundle_root + '/eval'"
+      }
+    ]
+  }
+}

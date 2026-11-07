@@ -1,0 +1,95 @@
+# Troubleshooting
+
+First step, always:
+
+```bash
+nezaret doctor
+```
+
+It reports the nezaret version, the MONAI release its rules were checked
+against, whether PyYAML is there (for YAML bundles), and whether MONAI imports
+(for `lint_compose()`), or **`BROKEN`** with the exception if it is installed
+and fails to import, which usually means a torch problem underneath.
+
+---
+
+## "nezaret: no config files checked"
+
+Exit code 2. Either:
+
+- **none found.** nezaret looks for `configs/` under the path you gave,
+  or for `.json`/`.yaml` files containing `_target_` directly in it. Point it
+  at the bundle folder, the `configs/` folder or a single file.
+- **none could be read.** The notes above the summary say why. The usual case
+  is a YAML bundle without PyYAML: `pip install "nezaret[yaml]"`.
+
+## A finding I think is wrong
+
+Read `nezaret explain <rule>` first; several rules fire on things that look
+deliberate and are not. If it really is a false positive:
+
+```bash
+nezaret lint PATH --ignore NZ108
+```
+
+and please open an issue with the config lines. Every false positive found so
+far became a test (see TESTING.md), and that is how the rules get better.
+
+### NZ101/NZ102/NZ103 on a key that is not a label
+
+Label keys are inferred from names (`label`, `seg`, `mask`, `gt`, …) and from
+per-key `mode` lists. If your keys are named differently, say which ones hold
+label maps, and only those are used:
+
+```bash
+nezaret lint PATH --label-keys organs,lesions
+```
+
+### NZ103 on a key that is meant to be left behind
+
+nezaret already allows: a crop guide (`label_key` of a label-guided crop),
+centred crops of different sizes, keys removed with `DeleteItemsd` or
+`SelectItemsd`, and in evaluation a label kept in original space. If your
+pipeline drops a key some other way, remove it with `DeleteItemsd` before the
+spatial transform. That also makes the intent visible to the next reader.
+
+### NZ104 on my own transform
+
+A bare `_target_` is resolved by MONAI against its own modules only. Your own
+classes need a qualified name (`scripts.transforms.MyTransform`), which
+nezaret skips. If MONAI resolves the bare name for you, the class is in a
+MONAI version newer than the list nezaret ships (see `nezaret doctor`), and
+`tools/refresh_monai_components.py` updates it.
+
+### NZ109 when training data was preprocessed offline
+
+`Spacingd only in evaluation` is correct if the training images were resampled
+to the same grid before training. The message says so; ignore the rule for
+that bundle, and consider writing the offline step down in the bundle's README.
+
+---
+
+## Nothing is reported for a pipeline I know is wrong
+
+- **Is it built by an expression?** `"transforms": "$build(...)"` cannot be
+  read without running code, so the pipeline is skipped. `report.pipelines`
+  (and the summary line) says how many pipelines were found.
+- **Are its keys or modes expressions?** `"mode": "$@modes"` is unknown, so
+  NZ101 skips that transform rather than guessing.
+- **Is there a custom step before it?** After a `scripts.*` transform the
+  key-tracking rules stop, because the step may have created or merged keys.
+- **Was the role detected?** Evaluation-only rules (NZ107, NZ108) need the
+  pipeline's path or file name to say validation, evaluation, inference or
+  test. The JSON report shows the detected role of the pipeline behind every
+  finding (`"pipeline": "train.json:validate#preprocessing (eval)"`).
+
+## `lint_compose()` finds nothing in my post-processing pipeline
+
+Pass `role="post"`, and for NZ106 pass the preprocessing it inverts:
+
+```python
+nezaret.lint_compose(post, role="post", preprocessing=val_transforms)
+```
+
+The preprocessing is used as context only. Lint it separately with
+`role="eval"` if you want it checked too.

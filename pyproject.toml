@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nezaret"
+dynamic = ["version"]
+description = "Find MONAI pipeline faults that do not raise errors: misaligned labels, interpolated class maps, evaluation that peeks at the ground truth."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "Aslan Satary Dizaji"}]
+keywords = ["MONAI", "medical-imaging", "segmentation", "linter", "validation", "reproducibility"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Healthcare Industry",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+  "Topic :: Scientific/Engineering :: Image Processing",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []   # deliberately none: stdlib only
+
+[project.urls]
+Homepage = "https://github.com/aslansd/nezaret"
+Repository = "https://github.com/aslansd/nezaret"
+Issues = "https://github.com/aslansd/nezaret/issues"
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
+monai = ["monai>=1.4"]
+dev = ["pytest>=8", "pyyaml>=6"]
+all = ["pyyaml>=6", "monai>=1.4"]
+
+[project.scripts]
+nezaret = "nezaret.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "nezaret.__version__.__version__"}
+
+[tool.setuptools.package-data]
+nezaret = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
