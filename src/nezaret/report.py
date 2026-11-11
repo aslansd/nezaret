@@ -11,8 +11,14 @@ _MARK = {"error": "E", "warning": "W", "info": "I"}
 
 def _summary(report) -> str:
     c = report.counts()
-    return (f"{len(report.files)} file(s), {report.pipelines} pipeline(s): "
-            f"{c['error']} error(s), {c['warning']} warning(s), {c['info']} info")
+    tail = f"{c['error']} error(s), {c['warning']} warning(s), {c['info']} info"
+    if report.cases:
+        st = report.stats or {}
+        splits = st.get("splits", {})
+        parts = ", ".join(f"{k} {v}" for k, v in splits.items())
+        pats = f", {st['patients']} patient id(s)" if st.get("patients") else ""
+        return (f"{report.cases} case(s) [{parts}], {st.get('files', 0)} file(s) read{pats}: {tail}")
+    return f"{len(report.files)} file(s), {report.pipelines} pipeline(s): {tail}"
 
 
 def text(report) -> str:

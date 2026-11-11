@@ -7,11 +7,16 @@
 or, on a pipeline built in Python:
 
     >>> nezaret.lint_compose(train_transforms, role="train")
+
+and on the data a bundle trains on:
+
+    >>> nezaret.check_data("dataset.json", base_dir="/data/Task09_Spleen")
 """
 
 from .__version__ import __version__
 from .lint import Report, lint, lint_compose, lint_config
 from .rules import RULES, Finding, Rule
+from .dataset import check_data  # also registers the NZ2xx rules
 
-__all__ = ["__version__", "lint", "lint_config", "lint_compose", "Report",
+__all__ = ["__version__", "lint", "lint_config", "lint_compose", "check_data", "Report",
            "Finding", "Rule", "RULES"]

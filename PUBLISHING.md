@@ -11,7 +11,7 @@ pip install build twine
 
 ```bash
 # src/nezaret/__version__.py
-__version__ = "0.1.1"
+__version__ = "0.2.1"
 ```
 
 `tests/test_cli.py::test_installed_version_matches_source` fails if the
@@ -25,9 +25,12 @@ finished.
 **3. Verify.**
 
 ```bash
-pytest -q                                            # 79 passed, 3 skipped with MONAI
-NEZARET_MODEL_ZOO=/tmp/model-zoo/models pytest -q    # 82 passed
+pytest -q                                            # 117 passed, 3 skipped with MONAI
+NEZARET_MODEL_ZOO=/tmp/model-zoo/models pytest -q    # 120 passed
 nezaret lint examples/faulty_bundle                  # 5 errors, 3 warnings, 1 info
+python examples/make_faulty_dataset.py /tmp/fd
+nezaret data /tmp/fd/dataset.json --patient-id-regex "(p\d{3})" --site-regex "(site[A-Z])"
+                                                     # 7 errors, 3 warnings, 1 info
 nezaret doctor
 ```
 
@@ -41,21 +44,25 @@ python -m twine check dist/*
 
 **5. Test the artifact, not the source tree.** This catches packaging mistakes
 the test suite cannot see, such as `data/monai_components.json` missing from
-the wheel, which would make every bare `_target_` an NZ104 error:
+the wheel, which would make every bare `_target_` an NZ104 error. The first
+`pytest` run, with nothing but pytest installed, is the one that checks the
+zero-dependency promise; it caught a numpy import in 0.2.0 before release:
 
 ```bash
 python -m venv /tmp/check
 /tmp/check/bin/pip install dist/nezaret-*.whl pytest
 /tmp/check/bin/nezaret doctor            # must say "2446 component names"
 mkdir /tmp/sd && tar xzf dist/nezaret-*.tar.gz -C /tmp/sd
-cd /tmp/sd/nezaret-* && /tmp/check/bin/python -m pytest -q    # 66 passed, 6 skipped
+cd /tmp/sd/nezaret-* && /tmp/check/bin/python -m pytest -q    # 79 passed, 7 skipped: nothing but pytest
+/tmp/check/bin/pip install pyyaml numpy nibabel pydicom
+/tmp/check/bin/python -m pytest -q                           # 105 passed, 5 skipped
 ```
 
 **6. Upload.**
 
 ```bash
 python -m twine upload dist/*
-git tag v0.1.1 && git push --tags
+git tag v0.2.1 && git push --tags
 ```
 
 **7. Confirm.** pip caches the index page and PyPI's CDN takes a minute or two,
@@ -101,7 +108,7 @@ list automatically.
 These come from publishing nezaret's sibling packages.
 
 **A version number can never be reused**, not even after deleting the release.
-If 0.1.1 turns out wrong, ship 0.1.2.
+If 0.2.1 turns out wrong, ship 0.2.2.
 
 **`pip install --no-cache-dir`** when verifying. Without it you will see the
 previous version and conclude the upload failed.
@@ -135,12 +142,12 @@ licence file present.
 
 ## Before announcing a release publicly
 
-- [ ] `pytest -q` green, with and without MONAI
+- [ ] `pytest -q` green with nothing installed, with `[dev]`, and with MONAI
 - [ ] model-zoo regression test green against a fresh clone
-- [ ] `nezaret lint examples/faulty_bundle` matches the README
+- [ ] `nezaret lint examples/faulty_bundle` and the `nezaret data` example match the README
 - [ ] wheel installed into a clean venv, `nezaret doctor` reports 2446 names
 - [ ] README renders correctly on the live PyPI page
-- [ ] **nezaret run on your own MONAI work, and every finding read**
+- [ ] **nezaret run on your own MONAI work and on a real dataset, and every finding read**
 - [ ] `git tag && git push --tags`
 
 The second-to-last item is the one that matters. A linter earns trust by what

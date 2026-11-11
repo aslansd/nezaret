@@ -3,20 +3,24 @@
 **نظارت**: *oversight, supervision, inspection.* The same word in Persian
 (*nezārat*), Turkish (*nezaret*) and Azerbaijani (*nəzarət*).
 
-Find faults in [MONAI](https://monai.io) pipelines that **do not raise
-errors**: a label map resampled with bilinear interpolation, a rotation applied
-to the image but not its label, a validation crop chosen from the ground truth,
-an inference pipeline that preprocesses differently from training.
+Find faults in [MONAI](https://monai.io) pipelines and datasets that **do not
+raise errors**: a label map resampled with bilinear interpolation, a rotation
+applied to the image but not its label, a validation crop chosen from the
+ground truth, an inference pipeline that preprocesses differently from
+training, a label saved with the wrong header, the same patient in training
+and test.
 
 Each of these trains, evaluates and reports a number. The number is wrong, and
 nothing in the run says so.
 
 **No dependencies. Runs offline. Reads configs as data; never imports torch, never
-runs a transform.**
+runs a transform, never trains anything.**
 
 ```bash
 pip install nezaret
-nezaret lint path/to/bundle
+nezaret lint path/to/bundle                  # the pipeline
+pip install "nezaret[data]"
+nezaret data path/to/dataset.json            # the data it trains on
 ```
 
 Python 3.10+. Apache 2.0. Rules are checked against MONAI 1.6.1.
@@ -116,6 +120,86 @@ says.
 
 ---
 
+## `nezaret data`: the dataset
+
+`nezaret lint` reads the pipeline. `nezaret data` reads the datalist the
+pipeline trains on (the Decathlon format `load_decathlon_datalist` reads) and
+the files it points at:
+
+```text
+$ python examples/make_faulty_dataset.py /tmp/faulty_dataset
+$ nezaret data /tmp/faulty_dataset/dataset.json --patient-id-regex "(p\d{3})" --site-regex "(site[A-Z])"
+dataset.json
+  E NZ201 missing-file             training#12#image
+      'images/siteA_p099_scan1.nii.gz' does not exist.
+  E NZ201 missing-file             training#12#label
+      'labels/siteA_p099_scan1.nii.gz' does not exist.
+  E NZ202 geometry-mismatch        training#8#label
+      label 'labels/siteA_p031_scan1.nii.gz' vs image 'images/siteA_p031_scan1.nii.gz': spacing (1.5, 1.5, 2.5) vs (1, 1, 1); origin (18, -20, -12) vs (0, 0, 0); direction differs.
+  E NZ203 label-values             training#9#label
+      'labels/siteA_p032_scan1.nii.gz' has fractional values (resampled with interpolation?).
+  E NZ206 patient-leakage          training#2
+      'images/siteA_p003_scan1.nii.gz', 'labels/siteA_p003_scan1.nii.gz' listed in 2 splits (training, testing): training#2, testing#4.
+  E NZ206 patient-leakage          training#4
+      patient #dc663a6c has cases in training (1), testing (1): training#4, testing#3.
+  E NZ207 duplicate-image          training#0#image
+      identical voxels in 2 splits: 'images/siteA_p001_scan1.nii.gz' (training), 'images/siteB_p041_scan1.nii.gz' (testing).
+  W NZ205 class-coverage           validation
+      class(es) [2] are in training but never in 'validation', so they are never scored there.
+  W NZ207 duplicate-image          training#1#image
+      near-duplicate (fingerprint r=1.0000): 'images/siteA_p002_scan1.nii.gz' (training) and 'images/siteB_p042_scan1.nii.gz' (testing).
+  W NZ208 site-confounding         site
+      site: 'siteB' only in testing (5).
+  I NZ204 empty-labels             training#10#label
+      2 of 12 label maps in 'training' are empty.
+
+26 case(s) [training 13, validation 3, testing 10], 41 file(s) read, 24 patient id(s): 7 error(s), 3 warning(s), 1 info
+```
+
+| Rule | Severity | Catches |
+|---|---|---|
+| `NZ201` missing-file | error | a listed file that does not exist |
+| `NZ202` geometry-mismatch | error | image and label disagree on shape, spacing, origin or direction (a label saved with an identity affine, a flipped axis) |
+| `NZ203` label-values | error | fractional values (a label resampled with interpolation before saving), negative values, or hundreds of distinct values (an image under a label path) |
+| `NZ204` empty-labels | info | how many label maps per split are empty, because that changes mean Dice depending on how empty cases are scored |
+| `NZ205` class-coverage | warning | a class that appears in evaluation but never in training, or is never in an evaluation split and so never scored |
+| `NZ206` patient-leakage | error | the same file, or the same patient, in two splits; **folds count as splits** |
+| `NZ207` duplicate-image | error / warning | identical voxels across splits (error), or the same scan saved again at another dtype or scaling (warning) |
+| `NZ208` site-confounding | warning | a scanner, field strength, institution or site that appears in only one split |
+
+**Where patient identity comes from**, in order: a `patient_id` (or
+`patient`, `subject`, `subject_id`, `PatientID`) field in the datalist entry,
+`--patient-key`, DICOM `PatientID`, then `--patient-id-regex` on the file path.
+NIfTI files carry no patient or scanner metadata, so for NIfTI datasets the
+regexes are how leakage and site checks see anything. **Identifiers are never
+printed**; a finding names a patient by the first eight characters of a SHA-256
+digest.
+
+**The near-duplicate fingerprint** is a 16×16×16 block-mean of the volume in
+canonical orientation, z-scored. On nibabel's real sample scans, copies of the
+same scan at another dtype, scaling or with 5 % noise correlate at 1.000;
+different scans, and even a 2-voxel crop (0.60) or a left-right flip (0.83) of
+the same one, stay far below the 0.995 threshold. So it finds *re-saved*
+copies, not cropped or re-registered ones. It has not been calibrated on a
+cohort registered to one atlas, where different subjects may correlate more
+closely; raise `--near-duplicate` if it fires there.
+
+**Headers only:** `--no-pixels` skips loading voxels (NZ203, NZ204, NZ205 and
+NZ207), which is the difference between 0.4 s per CT-sized case and 0.07 s for
+forty of them, measured on a 2-core machine.
+
+Reads NIfTI (nibabel) and DICOM: a file, or a folder holding one series
+(pydicom). Anything else, or a compressed DICOM with no decoder installed, is
+reported as a note, never as clean. Geometry is only compared between two files
+of the same format.
+
+```python
+report = nezaret.check_data("dataset.json", base_dir="/data/Task09_Spleen",
+                            patient_id_regex=r"(sub-\d+)")
+```
+
+---
+
 ## Commands
 
 ```bash
@@ -124,6 +208,7 @@ nezaret lint PATH --format markdown  # or json; -o report.md to write a file
 nezaret lint PATH --fail-on warning  # exit 1 on warnings too (default: errors only)
 nezaret lint PATH --ignore NZ108,no-determinism
 nezaret lint PATH --label-keys seg,organs
+nezaret data DATALIST [--base-dir DIR] [--no-pixels] [--patient-id-regex RE] [--site-regex RE]
 nezaret rules
 nezaret explain NZ103
 nezaret doctor
@@ -191,10 +276,9 @@ resample their images that way.
   statically; any other expression is treated as unknown and the rules that
   would need it are skipped, never guessed. A pipeline built entirely by an
   expression is not checked.
-- **It does not read your data list or your images.** It cannot know that
-  your data list supplies four files per key (which is why `NZ110` is info) or
-  that two cases come from the same patient. That is `nezaret data`, planned
-  for 0.2.0 (see the [ROADMAP](ROADMAP.md)).
+- **`nezaret lint` does not read your data list or your images.** It cannot
+  know that your data list supplies four files per key (which is why `NZ110`
+  is info). That is `nezaret data`'s job, below.
 - **It does not judge custom transforms.** After a `scripts.*` step that may
   add, merge or drop keys, the key-tracking rules stop rather than guess.
 

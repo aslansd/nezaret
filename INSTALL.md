@@ -24,13 +24,22 @@ nezaret doctor
 | Extra | Pulls | Needed for |
 |---|---|---|
 | `nezaret[yaml]` | PyYAML | bundles written in YAML (`train.yaml`). Without it those files are skipped with a note, never silently |
+| `nezaret[data]` | numpy, nibabel, pydicom | `nezaret data` beyond the path checks: reading NIfTI and DICOM headers and voxels. Without it, missing files and shared entries are still found and every unread file is listed in a note |
 | `nezaret[monai]` | MONAI ≥ 1.4, and through it **PyTorch** | `nezaret.lint_compose()` on live pipeline objects, and the live test suite |
-| `nezaret[all]` | both | |
-| `nezaret[dev]` | pytest, PyYAML | running the tests |
+| `nezaret[all]` | all three | |
+| `nezaret[dev]` | pytest, PyYAML, numpy, nibabel, pydicom | running the tests (MONAI separately, see below) |
 
 ```bash
-pip install "nezaret[yaml]"     # most people want this one
+pip install "nezaret[yaml,data]"     # most people want these two
 ```
+
+None of the three pulls torch. nibabel and pydicom are pure Python on top of
+numpy, so `nezaret[data]` is a few MB.
+
+Compressed DICOM (JPEG, JPEG 2000, JPEG-LS) also needs a decoder for the
+voxel checks, e.g. `pip install pylibjpeg pylibjpeg-libjpeg pylibjpeg-openjpeg`.
+Without one, headers are still read (geometry, patient, scanner) and the
+voxel checks for those files are listed in a note.
 
 **Linting a bundle never needs MONAI.** Bundle configs are read as data, so a
 laptop with no CUDA and no torch checks them as well as a GPU server does. Only
@@ -63,17 +72,18 @@ pytest tests/test_live_monai.py -v
 ## Offline or behind a slow connection
 
 Because the core has no dependencies, the wheel is the whole install (about
-40 KB). On any machine with access to PyPI:
+60 KB). On any machine with access to PyPI:
 
 ```bash
 pip download nezaret --no-deps -d wheels/
 pip download pyyaml --no-deps -d wheels/      # optional, for YAML bundles
+pip download numpy nibabel pydicom -d wheels/  # optional, for nezaret data (pick your platform's numpy)
 ```
 
 Copy `wheels/` across and:
 
 ```bash
-pip install --no-index --find-links wheels/ nezaret pyyaml
+pip install --no-index --find-links wheels/ nezaret pyyaml nibabel pydicom
 ```
 
 ---
@@ -89,3 +99,22 @@ pytest -q
 
 See [TESTING.md](TESTING.md) for what a green run looks like in each
 environment.
+
+### When pip cannot reach PyPI
+
+`pip install -e .` first downloads `setuptools>=77` into an isolated build
+environment, so it fails with `No matching distribution found for
+setuptools>=77` on a connection that times out, even though nezaret itself
+needs nothing. Build with what is already installed instead (a conda `base`
+usually has setuptools, pytest, PyYAML, numpy, and often nibabel):
+
+```bash
+python3 -m venv .venv --system-site-packages
+source .venv/bin/activate
+python -c "import setuptools; print(setuptools.__version__)"   # must be 77 or newer
+pip install -e . --no-build-isolation --no-deps
+pytest -q
+```
+
+Without an install at all, `PYTHONPATH=src python -m pytest -q` runs every
+test except the one that compares installed metadata with `__version__`.

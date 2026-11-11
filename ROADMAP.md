@@ -1,13 +1,14 @@
 # Roadmap
 
-*Last revised 7 November 2026, against nezaret 0.1.0.*
+*Last revised 11 November 2026, against nezaret 0.2.0.*
 
 ---
 
 ## Where this stands
 
-**0.1.0**, Apache 2.0, **zero runtime dependencies**, **82 tests**,
-**eleven rules**, checked against MONAI 1.6.1.
+**0.2.0**, Apache 2.0, **zero runtime dependencies**, **120 tests**,
+**nineteen rules** (eleven for pipelines, eight for data), checked against
+MONAI 1.6.1.
 
 | | Status |
 |---|---|
@@ -15,17 +16,21 @@
 | `lint_compose()` on live MONAI pipelines | shipped |
 | Run over all 37 model-zoo bundles, every error read by hand | done, see README |
 | Upstream reports for the model-zoo findings | **not filed yet, see §1** |
-| `nezaret data`, `nezaret result` | planned, §2 and §3 |
+| `nezaret data`: datalist + NIfTI/DICOM checks (0.2.0) | shipped, §2 |
+| `nezaret data` on a real multi-patient cohort | **not done yet, see §2** |
+| `nezaret result` | planned, §3 |
 | **External users** | **none yet, the thing that actually matters** |
 
 ```
 tests/test_rules.py        56
 tests/test_cli.py          10
+tests/test_datalist.py     13
+tests/test_data.py         25   (skips without nibabel)
 tests/test_examples.py      2
 tests/test_live_monai.py   11   (skips without MONAI)
 tests/test_model_zoo.py     3   (opt-in: NEZARET_MODEL_ZOO)
                           ---
-                           82
+                          120
 ```
 
 ---
@@ -53,31 +58,38 @@ config alone.
 
 ---
 
-## 2. 0.2.0: `nezaret data`
+## 2. 0.2.0: `nezaret data`: shipped, one thing left
 
-The data list and the images, still without training anything.
+Shipped as planned: geometry agreement (NZ202), label sanity (NZ203, NZ204),
+class coverage (NZ205), patient leakage from DICOM `PatientID`, datalist
+fields or path regexes, folds included (NZ206), exact and near-duplicate
+voxels (NZ207), scanner and site balance (NZ208), plus missing files (NZ201).
+nibabel and pydicom are the optional `[data]` extra; the core stays
+dependency-free, and a bare install still finds missing files and shared
+entries.
 
-- **Geometry agreement.** Image and label of each case: same shape, spacing,
-  origin and direction. A label exported from a viewer with a flipped axis
-  loads, trains, and is wrong.
-- **Patient leakage across splits.** Same patient in training and test,
-  found from DICOM `PatientID`/`StudyInstanceUID` and header fields, and from
-  near-duplicate pixel hashes for when the IDs were scrubbed differently.
-  `dicleak` checks a CSV manifest for overlap and says it does not look at
-  DICOM metadata, pixels or hashes. That is the gap.
-- **Site and scanner balance.** Scanner model, field strength and site per
-  split, from the headers.
-- **Label sanity.** Values that are not integers, classes absent from a split,
-  empty masks counted.
+**What is still open: a real cohort.** Every data test runs on phantoms,
+nibabel's single-subject sample scans and synthetic DICOM. Before telling
+anyone 0.2.0 works on their data:
 
-Readers: nibabel and pydicom as an optional `[data]` extra, so the core stays
-dependency-free.
+1. **Check that one open dataset downloads from Tehran.** The Medical
+   Segmentation Decathlon's Task09_Spleen (41 training CTs, about 1.5 GB) is
+   the natural first one, because its `dataset.json` is exactly the format
+   nezaret reads. If it does not download, try a TCIA collection; if neither
+   does, ask a collaborator abroad to run `nezaret data --format json` and
+   send the report, which contains no images and no patient identifiers.
+2. **Run `nezaret data` on it, with and without `--no-pixels`, and read every
+   finding.** MSD has no leakage by construction, so the expected result is
+   close to clean: anything NZ202 or NZ203 says is either a real header
+   problem in a famous dataset (worth reporting) or a false positive (worth a
+   clean test).
+3. **Calibrate NZ207 on an atlas-registered cohort** (BraTS, or MSD Task01,
+   which is skull-stripped and co-registered). Different subjects registered
+   to one template are the most likely place for the 0.995 fingerprint
+   threshold to fire wrongly. Record the highest between-subject correlation
+   in the changelog, as 0.2.0 recorded the sample-scan calibration.
 
-**Check before starting:** that the open datasets used for testing (Medical
-Segmentation Decathlon, a TCIA collection) download from Tehran. Some hosts
-block sanctioned regions. If they do not, build the test fixtures from
-synthetic phantoms written with nibabel, which is better for planted faults
-anyway.
+---
 
 ## 3. 0.3.0: `nezaret result`
 

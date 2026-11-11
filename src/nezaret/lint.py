@@ -27,6 +27,8 @@ class Report:
     files: list[str] = field(default_factory=list)
     pipelines: int = 0
     notes: list[str] = field(default_factory=list)
+    cases: int = 0                                   # set by check_data
+    stats: dict = field(default_factory=dict)        # set by check_data
 
     def counts(self) -> dict[str, int]:
         c = {"error": 0, "warning": 0, "info": 0}
@@ -46,6 +48,7 @@ class Report:
         self.files.extend(other.files)
         self.pipelines += other.pipelines
         self.notes.extend(other.notes)
+        self.cases += other.cases
 
     def to_dict(self) -> dict:
         version, _ = monai_components()
@@ -54,6 +57,8 @@ class Report:
             "checked_against_monai": version,
             "files": self.files,
             "pipelines": self.pipelines,
+            "cases": self.cases,
+            "stats": self.stats,
             "summary": self.counts(),
             "findings": [f.to_dict() for f in self.findings],
             "notes": self.notes,

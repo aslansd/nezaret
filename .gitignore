@@ -5,3 +5,7 @@ __pycache__/
 .DS_Store
 .env
 .ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+.pytest_cache/

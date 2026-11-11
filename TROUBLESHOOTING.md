@@ -93,3 +93,56 @@ nezaret.lint_compose(post, role="post", preprocessing=val_transforms)
 
 The preprocessing is used as context only. Lint it separately with
 `role="eval"` if you want it checked too.
+
+---
+
+## `nezaret data`
+
+### "N file(s) not checked: reading this needs nibabel"
+
+Install the data extra: `pip install "nezaret[data]"`. Without it nezaret
+still checks paths (NZ201) and entries shared between splits (NZ206), and says
+which files it could not open. It never treats an unread file as clean.
+
+### "pixel data not decodable"
+
+The DICOM is compressed (JPEG, JPEG 2000, JPEG-LS) and pydicom has no decoder.
+Headers are still read; for the voxel checks install one, e.g.
+`pip install pylibjpeg pylibjpeg-libjpeg pylibjpeg-openjpeg`.
+
+### "N series in one folder"
+
+Each datalist entry must point at one DICOM series: a file, or a folder of
+slices sharing one `SeriesInstanceUID`. Split the folder by series.
+
+### No NZ206 or NZ208 on a NIfTI dataset I know has repeat patients or several sites
+
+NIfTI headers carry no patient or scanner information. Tell nezaret where it
+is: a `patient_id` field in the datalist entries, `--patient-key` for another
+field name, or a regex on the file path whose first group is the identifier:
+
+```bash
+nezaret data dataset.json --patient-id-regex "(sub-\d+)" --site-regex "/(site\d+)/"
+```
+
+### NZ207 near-duplicates between different patients
+
+The fingerprint is coarse on purpose (16×16×16 block means). On a cohort
+registered to one atlas, different subjects can look alike at that scale.
+Raise the threshold (`--near-duplicate 0.999`), and please report the highest
+correlation you see between known-different subjects; the threshold has not
+been calibrated on such a cohort yet.
+
+### NZ202 on a dataset that trains fine
+
+Check which header is right before re-exporting anything: open the image and
+the label together in a viewer (ITK-SNAP, 3D Slicer). MONAI uses each file's
+own header, so if the label's header is wrong the network trains on labels
+that sit somewhere other than where they appear in the viewer when opened
+alone.
+
+### It is slow
+
+Voxel checks read every file once, and decompressing `.nii.gz` dominates
+(about 0.4 s per CT-sized case). `--no-pixels` checks paths, geometry, patient
+identity and scanners from headers alone in a fraction of a second.
