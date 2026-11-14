@@ -28,7 +28,8 @@ class Report:
     pipelines: int = 0
     notes: list[str] = field(default_factory=list)
     cases: int = 0                                   # set by check_data
-    stats: dict = field(default_factory=dict)        # set by check_data
+    stats: dict = field(default_factory=dict)        # set by check_data / check_results
+    tables: str = ""                                 # set by check_results
 
     def counts(self) -> dict[str, int]:
         c = {"error": 0, "warning": 0, "info": 0}

@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.3.0: `nezaret result`
+
+**`nezaret result` asks whether a segmentation result survives the scoring
+choices.** It reads saved predictions for one or more methods and the labels,
+scores every case under every convention a careful author could have used,
+and says when the conclusion depends on the convention. Seven new rules:
+
+| Rule | Severity |
+|---|---|
+| `NZ301` unmatched-cases | error (warning for predictions without labels) |
+| `NZ302` prediction-geometry | error |
+| `NZ303` prediction-values | error (warning for an unknown class) |
+| `NZ304` empty-handling-sensitive | warning |
+| `NZ305` distance-implementation-sensitive | warning (voxel units differ from mm) / info |
+| `NZ306` ranking-not-robust | warning |
+| `NZ307` difference-unresolved | warning |
+
+**What the conventions are, read from the source of MONAI 1.6.1 and MedPy 0.5.2:**
+
+- `DiceMetric` defaults to `ignore_empty=True` (an empty ground truth is
+  dropped) and `reduction="mean"`, which averages over classes within each
+  case before averaging over cases.
+- MONAI's HD95 is the larger of the two directed 95th percentiles; MedPy's is
+  one percentile of both directions pooled. On the phantom example the two
+  differ by 14 % (3.10 vs 2.67 mm).
+- **Both compute in voxel units unless spacing is passed.** On the example's
+  0.7 × 0.7 × 3 mm grid, that turns 3.10 mm into 2.06.
+- Both pool the two directions for ASSD; the mean of the two directed means,
+  also in use, is offered as a variant.
+
+**Checked against the libraries.** `tests/test_live_metrics.py` asserts that
+nezaret's per-case Dice, HD95 (mm and voxels, both connectivities) and ASSD
+equal MONAI's and MedPy's on random anisotropic shapes, and that its
+aggregates equal `DiceMetric` with `reduction="mean"` and `"mean_batch"`,
+`ignore_empty` on and off.
+
+**Fast enough for real volumes.** Nearest edge voxels are found with a KD-tree
+over edge coordinates, which gives exactly the distance-transform lookup the
+libraries do (tested) at a fraction of the cost. On 20 cases of 512×512×100
+and two methods: 3.3 s for Dice only, 25 s with every distance variant, on a
+2-core machine. Development profiling took this from 89 s.
+
+**New optional extra `[result]`**: numpy, nibabel, scipy. Without scipy,
+`nezaret result` scores Dice only and says so; without nibabel it says what
+to install. The core stays dependency-free.
+
+**Validated on real data before release** ([VALIDATION.md](VALIDATION.md)):
+MSD Task09 (spleen CT) gives no findings; on MSD Task01 (BraTS), 274 of 484
+training images fall into 127 duplicate groups, 116 pairs being the same scan
+stored twice, and 52 of the 266 test images are a training scan re-saved;
+two model-zoo bundles scored on 9 spleen cases give a robust
+ranking and a 71 % gap between MONAI's and MedPy's HD95 for the same Swin
+UNETR predictions.
+
+**NZ207 changed because of that run.**
+
+- It now reports duplicates **inside** one split, as one warning per split,
+  saying why it matters there: leakage into any split made later from a
+  training list, double counting in an evaluation list.
+  Before, on Task01 it would have reported none of the 127 groups, all in
+  `training`, which leak into any validation split taken from it.
+- It reports **groups**, not pairs, and lists them in the JSON report under
+  `stats.duplicate_groups`, so a dataset can be split by group.
+- Fingerprint r ≥ 0.9999 now counts as the same scan (an error across
+  splits), not a near-duplicate: on Task01, 116 pairs were in that band and
+  only 2 had identical voxels.
+- The 0.995 threshold stays: on Task01 every pair above it was a re-stored
+  scan or one of a run of consecutive cases.
+
+**New tools for repeating the validation**: `tools/fingerprint_calibration.py`,
+`tools/duplicate_groups.py`, `tools/compare_pairs.py`,
+`tools/prepare_spleen_eval.py`.
+
+**Also in this release**
+
+- `nezaret doctor` reports scipy.
+- Rule slugs up to 33 characters line up in text output.
+- The shipped list of MONAI component names no longer contains `tqdm` (now
+  2445 names). MONAI defines a stand-in `tqdm` in
+  `monai.apps.pathology.metrics.lesion_froc` only when the real package is
+  missing, so the list depended on whether `tqdm` was installed where it was
+  generated, and `test_shipped_component_list_matches_installed` failed on
+  machines that had it. Such names are now listed in
+  `knowledge.ENV_DEPENDENT_COMPONENTS` and left out.
+
 ## 0.2.0: `nezaret data`
 
 **`nezaret data` checks a dataset the way `nezaret lint` checks a pipeline.**

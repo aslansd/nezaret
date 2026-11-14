@@ -113,6 +113,12 @@ REMOVED = {
 
 NEAREST_MODES = {"nearest", "nearest-exact", "0"}
 
+# Names MONAI defines only when an optional package is missing, so whether
+# ComponentLocator finds them depends on the environment. They are left out of
+# the shipped component list and ignored when comparing it with an install.
+# monai/apps/pathology/metrics/lesion_froc.py: `def tqdm(x)` if tqdm is absent.
+ENV_DEPENDENT_COMPONENTS = frozenset({"tqdm"})
+
 LABEL_KEY_RE = re.compile(
     r"(^|[_\-.])(label|labels|lbl|seg|segs|segmentation|mask|masks|gt|"
     r"groundtruth|ground_truth|annotation|annotations|annot|target|targets)"

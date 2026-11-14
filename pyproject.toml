@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nezaret"
 dynamic = ["version"]
-description = "Find MONAI pipeline and dataset faults that do not raise errors: misaligned labels, interpolated class maps, evaluation that peeks at the ground truth, patients leaking across splits."
+description = "Find MONAI pipeline and dataset faults that do not raise errors: misaligned labels, interpolated class maps, evaluation that peeks at the ground truth, patients leaking across splits, rankings that hinge on a scoring convention."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -31,9 +31,10 @@ Issues = "https://github.com/aslansd/nezaret/issues"
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]
 data = ["numpy>=1.22", "nibabel>=4", "pydicom>=2.3"]
+result = ["numpy>=1.22", "nibabel>=4", "scipy>=1.9"]
 monai = ["monai>=1.4"]
-dev = ["pytest>=8", "pyyaml>=6", "numpy>=1.22", "nibabel>=4", "pydicom>=2.3"]
-all = ["pyyaml>=6", "numpy>=1.22", "nibabel>=4", "pydicom>=2.3", "monai>=1.4"]
+dev = ["pytest>=8", "pyyaml>=6", "numpy>=1.22", "nibabel>=4", "pydicom>=2.3", "scipy>=1.9"]
+all = ["pyyaml>=6", "numpy>=1.22", "nibabel>=4", "pydicom>=2.3", "scipy>=1.9", "monai>=1.4"]
 
 [project.scripts]
 nezaret = "nezaret.cli:main"

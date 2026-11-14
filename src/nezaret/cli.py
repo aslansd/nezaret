@@ -11,6 +11,7 @@ from .__version__ import __version__
 from .knowledge import MONAI_REFERENCE_VERSION, monai_components
 from .dataset import check_data
 from .lint import lint
+from .result import check_results
 from .report import explain, rules_table
 from .rules import SEVERITIES, rank
 
@@ -63,6 +64,31 @@ def cmd_data(a) -> int:
     return 1 if report.at_least(a.fail_on) else 0
 
 
+def cmd_result(a) -> int:
+    preds = {}
+    for spec in a.pred:
+        if "=" not in spec:
+            print(f"--pred takes NAME=FOLDER, got {spec!r}", file=sys.stderr)
+            return 2
+        name, folder = spec.split("=", 1)
+        preds[name] = folder
+    if not a.labels and not a.datalist:
+        print("give --labels FOLDER or --datalist FILE --split NAME", file=sys.stderr)
+        return 2
+    classes = [int(c) for c in _split(a.classes)] if a.classes else None
+    report = check_results(a.labels, preds, datalist=a.datalist, split=a.split,
+                           base_dir=a.base_dir, classes=classes, case_regex=a.case_regex,
+                           distances=not a.no_distances, tolerance=a.tolerance,
+                           n_boot=a.bootstrap, seed=a.seed, ignore=_split(a.ignore))
+    _emit(a, report)
+    if not report.cases:
+        print("nezaret: no cases scored (see notes above)", file=sys.stderr)
+        return 2
+    if a.fail_on == "never":
+        return 0
+    return 1 if report.at_least(a.fail_on) else 0
+
+
 def cmd_rules(a) -> int:
     print(rules_table())
     return 0
@@ -87,12 +113,15 @@ def cmd_doctor(a) -> int:
         print(f"pyyaml       {yaml.__version__} (YAML configs supported)")
     except ImportError:
         print("pyyaml       not installed (YAML configs are skipped; pip install nezaret[yaml])")
-    for mod, purpose in (("nibabel", "NIfTI for nezaret data"), ("pydicom", "DICOM for nezaret data")):
+    for mod, purpose in (("nibabel", "NIfTI for nezaret data and result"),
+                         ("pydicom", "DICOM for nezaret data"),
+                         ("scipy", "surface distances for nezaret result")):
         try:
             m = __import__(mod)
             print(f"{mod:<12} {m.__version__} ({purpose})")
         except ImportError:
-            print(f"{mod:<12} not installed ({purpose}; pip install nezaret[data])")
+            extra = "result" if mod == "scipy" else "data"
+            print(f"{mod:<12} not installed ({purpose}; pip install nezaret[{extra}])")
     try:
         import monai
         mv = monai.__version__
@@ -140,6 +169,26 @@ def main(argv=None) -> int:
     p.add_argument("--ignore", action="append", help="comma-separated rule ids or slugs")
     p.add_argument("--fail-on", choices=list(SEVERITIES) + ["never"], default="error")
     p.set_defaults(func=cmd_data)
+
+    p = sub.add_parser("result", help="re-score predictions under every scoring convention")
+    p.add_argument("--labels", help="folder of label files")
+    p.add_argument("--datalist", help="or: a datalist whose --split entries hold the labels")
+    p.add_argument("--split", default="validation", help="datalist split with the labels (default: validation)")
+    p.add_argument("--base-dir", help="folder datalist paths start from")
+    p.add_argument("--pred", action="append", required=True, metavar="NAME=FOLDER",
+                   help="a method's prediction folder; repeat for each method")
+    p.add_argument("--classes", action="append", help="comma-separated class indices (default: all in the labels)")
+    p.add_argument("--case-regex", help="regex on file paths; group 1 is the case name")
+    p.add_argument("--no-distances", action="store_true", help="Dice only (no scipy needed, much faster)")
+    p.add_argument("--tolerance", type=float, default=0.01,
+                   help="Dice spread across conventions worth reporting (default 0.01)")
+    p.add_argument("--bootstrap", type=int, default=2000, metavar="N", help="bootstrap resamples (default 2000)")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--format", choices=["text", "markdown", "json"], default="text")
+    p.add_argument("-o", "--output", help="write the report to a file")
+    p.add_argument("--ignore", action="append", help="comma-separated rule ids or slugs")
+    p.add_argument("--fail-on", choices=list(SEVERITIES) + ["never"], default="error")
+    p.set_defaults(func=cmd_result)
 
     p = sub.add_parser("rules", help="list the rules")
     p.set_defaults(func=cmd_rules)

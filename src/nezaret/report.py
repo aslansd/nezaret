@@ -12,6 +12,10 @@ _MARK = {"error": "E", "warning": "W", "info": "I"}
 def _summary(report) -> str:
     c = report.counts()
     tail = f"{c['error']} error(s), {c['warning']} warning(s), {c['info']} info"
+    if report.cases and "methods" in (report.stats or {}):
+        st = report.stats
+        return (f"{report.cases} labelled case(s), {len(st['methods'])} method(s), "
+                f"{len(st['classes'])} class(es): {tail}")
     if report.cases:
         st = report.stats or {}
         splits = st.get("splits", {})
@@ -29,8 +33,11 @@ def text(report) -> str:
     for file, fs in by_file.items():
         lines.append(file)
         for f in fs:
-            lines.append(f"  {_MARK[f.severity]} {f.rule} {f.slug:<24} {f.location}")
+            lines.append(f"  {_MARK[f.severity]} {f.rule} {f.slug:<33} {f.location}")
             lines.append(f"      {f.message}")
+        lines.append("")
+    if getattr(report, "tables", ""):
+        lines.append(report.tables.lstrip("\n"))
         lines.append("")
     for n in report.notes:
         lines.append(f"note: {n}")
@@ -55,15 +62,17 @@ def markdown(report) -> str:
             out += [f"### {r.id} `{r.slug}`: {r.title}", "", r.why, "", f"**Fix:** {r.fix}", ""]
     else:
         out.append("No findings.")
+    if getattr(report, "tables", ""):
+        out += ["", "## Scores", "", "```text", report.tables.strip("\n"), "```"]
     if report.notes:
         out += ["", "## Notes", ""] + [f"- {n}" for n in report.notes]
     return "\n".join(out) + "\n"
 
 
 def rules_table() -> str:
-    lines = [f"{'Rule':<6} {'Severity':<8} {'Slug':<24} Title"]
+    lines = [f"{'Rule':<6} {'Severity':<8} {'Slug':<33} Title"]
     for r in RULES.values():
-        lines.append(f"{r.id:<6} {r.severity:<8} {r.slug:<24} {r.title}")
+        lines.append(f"{r.id:<6} {r.severity:<8} {r.slug:<33} {r.title}")
     return "\n".join(lines)
 
 

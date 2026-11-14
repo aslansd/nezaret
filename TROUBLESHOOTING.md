@@ -125,13 +125,24 @@ field name, or a regex on the file path whose first group is the identifier:
 nezaret data dataset.json --patient-id-regex "(sub-\d+)" --site-regex "/(site\d+)/"
 ```
 
+### NZ207 warns about duplicates inside `training`
+
+That is deliberate. If you hold out part of `training` for validation, which
+most bundles do, members of one group end up on both sides. The JSON report
+lists the groups (`nezaret data dataset.json --format json`, then
+`stats.duplicate_groups`): keep each group on one side of the split. If you
+never split that list, the warning is about the size of your effective
+dataset, not leakage.
+
 ### NZ207 near-duplicates between different patients
 
-The fingerprint is coarse on purpose (16×16×16 block means). On a cohort
-registered to one atlas, different subjects can look alike at that scale.
-Raise the threshold (`--near-duplicate 0.999`), and please report the highest
-correlation you see between known-different subjects; the threshold has not
-been calibrated on such a cohort yet.
+The fingerprint is coarse on purpose (16×16×16 block means). It was
+calibrated on BraTS (MSD Task01), where every subject is registered to one
+template: unrelated subjects stayed below the 0.995 threshold (99th percentile
+0.971), and every pair above it was the same scan or a likely repeat scan of
+one patient (see VALIDATION.md). If it fires between subjects you know are
+different, raise the threshold (`--near-duplicate 0.999`) and please report
+the correlation, with `tools/duplicate_groups.py`'s output if you can.
 
 ### NZ202 on a dataset that trains fine
 
@@ -146,3 +157,49 @@ alone.
 Voxel checks read every file once, and decompressing `.nii.gz` dominates
 (about 0.4 s per CT-sized case). `--no-pixels` checks paths, geometry, patient
 identity and scanners from headers alone in a fraction of a second.
+
+---
+
+## `nezaret result`
+
+### NZ301: every prediction is "missing"
+
+Files are paired by case name: the file name without `.nii`/`.nii.gz` and
+without a postfix such as `_seg`, `_pred` or `_trans`. If your names differ
+in another way (`pred_case01.nii.gz` vs `case01.nii.gz`), give a regex whose
+first group is the case name:
+
+```bash
+nezaret result --labels labels/ --pred m=preds/ --case-regex "(case\d+)"
+```
+
+### "N files map to case 'x'; none of them scored"
+
+Two files in one folder have the same case name after postfixes are removed,
+e.g. `x_seg.nii.gz` and `x_pred.nii.gz`. Keep one prediction per case per
+folder, or use `--case-regex`.
+
+### NZ302 on every case
+
+The predictions were saved on the preprocessed grid. Run `nezaret lint` on
+the bundle: `NZ106` usually explains it. Put `Invertd` before `SaveImaged`, or
+set `resample=true` on `SaveImaged`.
+
+### NZ305 as info on every run
+
+That is expected. HD95 depends on the implementation for most real
+predictions, by 10-20 % between MONAI's and MedPy's formula on the phantom
+example. It is reported so the number in a paper can name its implementation.
+It is a warning only when voxel units would give a different number from mm.
+
+### NZ307: "difference unresolved" on a result I believe
+
+The paired bootstrap uses the cases both methods were scored on, with an empty
+ground truth excluded (MONAI's default). With few cases or a small difference,
+the interval includes zero. More test cases, not more bootstrap resamples,
+narrow it.
+
+### It is slow
+
+Surface distances dominate. `--no-distances` scores Dice only, about eight
+times faster on CT-sized volumes. `--classes 1` scores one class.

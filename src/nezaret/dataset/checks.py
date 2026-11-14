@@ -75,14 +75,18 @@ _rule("NZ206", "patient-leakage", "error",
       "DICOM PatientID, a patient field in the datalist, or --patient-id-regex.")
 
 _rule("NZ207", "duplicate-image", "error",
-      "The same image content appears in more than one split",
-      "Identical voxels in training and evaluation is leakage that no ID "
-      "check catches: the same scan exported twice under two names, or with "
-      "a different datatype. nezaret compares exact content (error) and a "
-      "16x16x16 block-mean fingerprint (warning at correlation >= the "
-      "threshold), which matches re-saved copies but not cropped or "
-      "re-registered ones.",
-      "Remove one copy, or keep both in the same split.")
+      "The same scan, or a near-identical one, appears more than once",
+      "The same scan exported twice under two names (or rescaled, or relabelled) "
+      "is leakage that no ID check catches. nezaret compares exact content and "
+      "a 16x16x16 block-mean fingerprint. Across splits: an error for identical "
+      "voxels or fingerprint r >= 0.9999 (the same scan re-saved), a warning "
+      "between the threshold (0.995) and 0.9999, which in practice means the "
+      "same scan processed differently or a repeat scan of one patient. Within "
+      "one split: a warning, because any random split made from that list later "
+      "leaks. On MSD Task01 (BraTS) this found 274 of 484 training images in "
+      "127 such groups.",
+      "Keep each group on one side of every split (the JSON report lists the "
+      "groups under stats.duplicate_groups), or remove the extra copies.")
 
 _rule("NZ208", "site-confounding", "warning",
       "A scanner or site appears in only one split",
@@ -344,40 +348,108 @@ def nz206(st: State, cases: list[Case], datalist: str, base: Path, opt: Options)
     return len(by_patient)
 
 
-def nz207(st: State, datalist: str, base: Path, opt: Options):
+SAME_SCAN = 0.9999   # fingerprint correlation treated as "the same scan, re-saved"
+
+
+def nz207(st: State, datalist: str, base: Path, opt: Options) -> list[dict]:
+    """Group exact and near-duplicate images, across and within splits.
+
+    Returns the groups (for ``report.stats["duplicate_groups"]``), so a
+    dataset can be split by group instead of by file.
+    """
     imgs = [s for s in st.scans if not s.is_label and s.exact]
-    if not imgs:
-        return  # nothing hashed (e.g. no reader installed): numpy may not be there
-    by_hash = defaultdict(list)
-    for s in imgs:
-        by_hash[s.exact].append(s)
-    exact_pairs = set()
-    for group in by_hash.values():
-        splits = {s.case.split for s in group}
-        if len(splits) > 1 and len({s.vol.path for s in group}) > 1:
-            locs = [f"{s.case.location}#{s.key}" for s in group]
-            st.findings.append(_f("NZ207", datalist, locs[0],
-                                  f"identical voxels in {len(splits)} splits: "
-                                  + ", ".join(f"'{_short(s.vol.path, base)}' ({s.case.split})"
-                                              for s in group) + "."))
-            exact_pairs |= {(id(a), id(b)) for a in group for b in group}
-    with_sig = [s for s in imgs if s.sig is not None]
-    if len(with_sig) < 2:
-        return
+    if len(imgs) < 2:
+        return []  # nothing hashed (e.g. no reader installed): numpy may not be there
     import numpy as np
-    M = np.stack([s.sig for s in with_sig])
-    C = (M @ M.T) / M.shape[1]
-    ii, jj = np.where(np.triu(C, 1) >= opt.near_duplicate)
-    for i, j in zip(ii, jj):
-        a, b = with_sig[i], with_sig[j]
-        if a.case.split == b.case.split or (id(a), id(b)) in exact_pairs \
-                or a.vol.path == b.vol.path:
+    n = len(imgs)
+    edges: dict[tuple[int, int], tuple[str, float]] = {}
+    by_hash = defaultdict(list)
+    for i, s in enumerate(imgs):
+        by_hash[s.exact].append(i)
+    for members in by_hash.values():
+        for a in members:
+            for b in members:
+                if a < b and imgs[a].vol.path != imgs[b].vol.path:
+                    edges[(a, b)] = ("exact", 1.0)
+    idx = [i for i, s in enumerate(imgs) if s.sig is not None]
+    if len(idx) >= 2:
+        M = np.stack([imgs[i].sig for i in idx])
+        C = (M @ M.T) / M.shape[1]
+        ii, jj = np.where(np.triu(C, 1) >= opt.near_duplicate)
+        for x, y in zip(ii.tolist(), jj.tolist()):
+            a, b = sorted((idx[x], idx[y]))
+            if imgs[a].vol.path == imgs[b].vol.path or (a, b) in edges:
+                continue
+            r = float(C[x, y])
+            edges[(a, b)] = ("same-scan" if r >= SAME_SCAN else "near", r)
+    if not edges:
+        return []
+
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for a, b in edges:
+        parent[find(a)] = find(b)
+    members = defaultdict(list)
+    for i in {k for e in edges for k in e}:
+        members[find(i)].append(i)
+
+    def label(i):
+        return f"'{_short(imgs[i].vol.path, base)}' ({imgs[i].case.split})"
+
+    out, within = [], defaultdict(list)
+    order = {id(s.case): k for k, s in enumerate(st.scans)}
+    for root, mem in sorted(members.items(), key=lambda kv: min(order[id(imgs[i].case)] for i in kv[1])):
+        mem.sort(key=lambda i: order[id(imgs[i].case)])
+        g_edges = [(a, b, *edges[(a, b)]) for (a, b) in edges if find(a) == root]
+        splits = list(dict.fromkeys(imgs[i].case.split for i in mem))
+        strongest = "exact" if any(k == "exact" for *_, k, _ in g_edges) else \
+            ("same-scan" if any(k == "same-scan" for *_, k, _ in g_edges) else "near")
+        out.append({"images": [str(imgs[i].vol.path) for i in mem],
+                    "locations": [f"{imgs[i].case.location}#{imgs[i].key}" for i in mem],
+                    "splits": splits, "kind": strongest,
+                    "max_r": round(max(r for *_, r in g_edges), 5)})
+        if len(splits) == 1:
+            within[splits[0]].append((mem, strongest, g_edges))
             continue
+        cross = [(a, b, k, r) for a, b, k, r in g_edges if imgs[a].case.split != imgs[b].case.split]
+        same = [e for e in cross if e[2] in ("exact", "same-scan")]
+        if same:
+            how = "identical voxels" if any(e[2] == "exact" for e in same) else \
+                f"the same scan re-saved (fingerprint r >= {SAME_SCAN})"
+            sev = "error"
+        else:
+            how = (f"near-duplicates (fingerprint r up to {max(e[3] for e in cross):.4f}): "
+                   f"the same scan processed differently, or a repeat scan of one patient")
+            sev = "warning"
+        shown = ", ".join(label(i) for i in mem[:6]) + (f" and {len(mem) - 6} more" if len(mem) > 6 else "")
+        st.findings.append(_f("NZ207", datalist, f"{imgs[mem[0]].case.location}#{imgs[mem[0]].key}",
+                              f"{how} across {len(splits)} splits: {shown}.", severity=sev))
+
+    for split, gs in within.items():
+        n_img = sum(len(m) for m, _, _ in gs)
+        n_same = sum(1 for _, k, _ in gs if k in ("exact", "same-scan"))
+        big = max(gs, key=lambda g: len(g[0]))
+        example = ", ".join(_short(imgs[i].vol.path, base) for i in big[0][:4])
+        first = gs[0][0][0]
+        if is_eval_split(split):
+            why = ("Its cases are not independent: a scan stored twice counts twice in the "
+                   "mean score, and repeat scans of one patient count as separate patients.")
+        else:
+            why = ("Any random train/validation split of this list will put members of one "
+                   "group on both sides; split by group.")
         st.findings.append(_f(
-            "NZ207", datalist, f"{a.case.location}#{a.key}",
-            f"near-duplicate (fingerprint r={C[i, j]:.4f}): '{_short(a.vol.path, base)}' "
-            f"({a.case.split}) and '{_short(b.vol.path, base)}' ({b.case.split}).",
+            "NZ207", datalist, f"{imgs[first].case.location}#{imgs[first].key}",
+            f"'{split}' holds {len(gs)} group(s) of duplicate or near-duplicate images "
+            f"({n_img} images; {n_same} group(s) are the same scan stored more than once; "
+            f"largest: {example}{' ...' if len(big[0]) > 4 else ''}). {why} The groups are in "
+            f"the JSON report under stats.duplicate_groups.",
             severity="warning"))
+    return out
 
 
 def nz208(st: State, cases: list[Case], datalist: str, opt: Options):
@@ -422,9 +494,11 @@ def run(cases: list[Case], datalist: str, base: Path, opt: Options) -> tuple[Sta
         nz203(st, datalist, base)
         nz204(st, datalist)
         nz205(st, datalist)
-        nz207(st, datalist, base, opt)
+        groups = nz207(st, datalist, base, opt)
+    else:
+        groups = []
     patients = nz206(st, cases, datalist, base, opt)
     nz208(st, cases, datalist, opt)
     stats = {"cases": len(cases), "files": len(st.scans), "patients": patients,
-             "splits": dict(Counter(c.split for c in cases))}
+             "splits": dict(Counter(c.split for c in cases)), "duplicate_groups": groups}
     return st, stats

@@ -1,14 +1,14 @@
 # Roadmap
 
-*Last revised 11 November 2026, against nezaret 0.2.0.*
+*Last revised 14 November 2026, against nezaret 0.3.0.*
 
 ---
 
 ## Where this stands
 
-**0.2.0**, Apache 2.0, **zero runtime dependencies**, **120 tests**,
-**nineteen rules** (eleven for pipelines, eight for data), checked against
-MONAI 1.6.1.
+**0.3.0**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
+**twenty-six rules** (eleven for pipelines, eight for data, seven for
+results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 
 | | Status |
 |---|---|
@@ -17,20 +17,23 @@ MONAI 1.6.1.
 | Run over all 37 model-zoo bundles, every error read by hand | done, see README |
 | Upstream reports for the model-zoo findings | **not filed yet, see §1** |
 | `nezaret data`: datalist + NIfTI/DICOM checks (0.2.0) | shipped, §2 |
-| `nezaret data` on a real multi-patient cohort | **not done yet, see §2** |
-| `nezaret result` | planned, §3 |
+| `nezaret data` on real cohorts: MSD Task09 and Task01 | done, [VALIDATION.md](VALIDATION.md) |
+| `nezaret result`: re-scoring under every convention, bootstrap, ranking (0.3.0) | shipped, §3 |
+| `nezaret result` on two real models' predictions | done, [VALIDATION.md](VALIDATION.md) |
 | **External users** | **none yet, the thing that actually matters** |
 
 ```
 tests/test_rules.py        56
 tests/test_cli.py          10
-tests/test_datalist.py     13
-tests/test_data.py         25   (skips without nibabel)
+tests/test_datalist.py     14
+tests/test_data.py         27   (skips without nibabel)
+tests/test_result.py       18   (skips without nibabel/scipy)
+tests/test_live_metrics.py  7   (MONAI and MedPy parts skip without them)
 tests/test_examples.py      2
 tests/test_live_monai.py   11   (skips without MONAI)
 tests/test_model_zoo.py     3   (opt-in: NEZARET_MODEL_ZOO)
                           ---
-                          120
+                          148
 ```
 
 ---
@@ -58,7 +61,7 @@ config alone.
 
 ---
 
-## 2. 0.2.0: `nezaret data`: shipped, one thing left
+## 2. 0.2.0: `nezaret data`: shipped and validated on real data
 
 Shipped as planned: geometry agreement (NZ202), label sanity (NZ203, NZ204),
 class coverage (NZ205), patient leakage from DICOM `PatientID`, datalist
@@ -68,43 +71,54 @@ nibabel and pydicom are the optional `[data]` extra; the core stays
 dependency-free, and a bare install still finds missing files and shared
 entries.
 
-**What is still open: a real cohort.** Every data test runs on phantoms,
-nibabel's single-subject sample scans and synthetic DICOM. Before telling
-anyone 0.2.0 works on their data:
+**The real-cohort check is done** ([VALIDATION.md](VALIDATION.md), 14
+November 2026). MSD Task09 downloaded from Tehran and gave no findings. On
+MSD Task01, the calibration found 178 pairs above 0.995, all of them either
+the same scan stored twice (116) or within runs of consecutive cases that look
+like repeat scans of one patient (62): the threshold stands. It also showed
+that duplicates inside one split went unreported, which 0.3.0 now reports.
 
-1. **Check that one open dataset downloads from Tehran.** The Medical
-   Segmentation Decathlon's Task09_Spleen (41 training CTs, about 1.5 GB) is
-   the natural first one, because its `dataset.json` is exactly the format
-   nezaret reads. If it does not download, try a TCIA collection; if neither
-   does, ask a collaborator abroad to run `nezaret data --format json` and
-   send the report, which contains no images and no patient identifiers.
-2. **Run `nezaret data` on it, with and without `--no-pixels`, and read every
-   finding.** MSD has no leakage by construction, so the expected result is
-   close to clean: anything NZ202 or NZ203 says is either a real header
-   problem in a famous dataset (worth reporting) or a false positive (worth a
-   clean test).
-3. **Calibrate NZ207 on an atlas-registered cohort** (BraTS, or MSD Task01,
-   which is skull-stripped and co-registered). Different subjects registered
-   to one template are the most likely place for the 0.995 fingerprint
-   threshold to fire wrongly. Record the highest between-subject correlation
-   in the changelog, as 0.2.0 recorded the sample-scan calibration.
+**Still open:**
+
+1. **Check the remaining 49 Task01 training/test pairs at full resolution.**
+   0.3.0 reports 52 test images that are a training scan re-saved; three
+   (BRATS_243/720, 027/682, 112/695) are confirmed in VALIDATION.md, all four
+   channels at r = 1.0000.
+2. **Report the Task01 duplicates.** First check whether they are already
+   documented (BraTS forums, the MSD paper's errata, papers that use Task01);
+   if not, a short note with the group list from
+   `nezaret data --format json` is useful to everyone who trains on Task01
+   with a random split, and the training/test overlap matters to everyone who
+   compares results on the MSD Task01 test set.
 
 ---
 
-## 3. 0.3.0: `nezaret result`
+## 3. 0.3.0: `nezaret result`: shipped, first real run done
 
-Re-score saved predictions against labels under each defensible choice and
-report whether the conclusion survives, as `ayar` does for spike sorting:
+Shipped as planned: every prediction re-scored under three empty-ground-truth
+conventions × two class/case orders, plus pooled Dice; sixteen HD95 and
+sixteen ASSD variants (MONAI vs MedPy formula, mm vs voxels, 6- vs 26-neighbour
+edges, empty masks excluded vs worst case); paired bootstrap intervals; the
+ranking of every pair of methods under every variant. Seven rules, NZ301 to
+NZ307. Each convention named after a library is checked against that
+library: MONAI 1.6.1 and MedPy 0.5.2, per case and aggregated.
 
-- empty ground-truth cases: excluded (MONAI's `ignore_empty`), scored 1, or
-  scored 0;
-- Hausdorff/surface-distance implementation variants;
-- per-case mean vs pooled;
-- bootstrap intervals, and whether the ranking of two methods holds across all
-  of the above.
+**Done:** the first real run ([VALIDATION.md](VALIDATION.md)): two model-zoo
+bundles on 9 MSD spleen cases. The ranking was robust and nezaret said so;
+HD95 for the same Swin UNETR predictions was 5.90 mm with MONAI's formula and
+3.45 mm with MedPy's.
 
-The reference for which choices matter is the Metrics Reloaded guidelines and
-the distance-metric implementation study (arXiv 2410.02630).
+**Still open:**
+
+1. **A real comparison that is close**, where NZ306 and NZ307 should fire:
+   e.g. one bundle at two training checkpoints, or two runs with different
+   seeds.
+2. **Normalised surface distance (NSD) and boundary IoU.** Metrics Reloaded
+   recommends NSD for many segmentation tasks, and the distance-metric
+   implementation study (arXiv 2410.02630) found NSD implementations
+   disagree too. Both reuse the edge distances nezaret already computes;
+   each needs its tolerance as a parameter and a parity test against MONAI's
+   `SurfaceDiceMetric`.
 
 ## 4. 0.4.0: nnU-Net
 

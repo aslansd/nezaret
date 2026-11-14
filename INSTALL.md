@@ -25,16 +25,17 @@ nezaret doctor
 |---|---|---|
 | `nezaret[yaml]` | PyYAML | bundles written in YAML (`train.yaml`). Without it those files are skipped with a note, never silently |
 | `nezaret[data]` | numpy, nibabel, pydicom | `nezaret data` beyond the path checks: reading NIfTI and DICOM headers and voxels. Without it, missing files and shared entries are still found and every unread file is listed in a note |
+| `nezaret[result]` | numpy, nibabel, scipy | `nezaret result`: reading predictions and labels, and surface distances (scipy). Without scipy it scores Dice only and says so in a note |
 | `nezaret[monai]` | MONAI ≥ 1.4, and through it **PyTorch** | `nezaret.lint_compose()` on live pipeline objects, and the live test suite |
-| `nezaret[all]` | all three | |
-| `nezaret[dev]` | pytest, PyYAML, numpy, nibabel, pydicom | running the tests (MONAI separately, see below) |
+| `nezaret[all]` | all of the above | |
+| `nezaret[dev]` | pytest, PyYAML, numpy, nibabel, pydicom, scipy | running the tests (MONAI and MedPy separately, see TESTING.md) |
 
 ```bash
-pip install "nezaret[yaml,data]"     # most people want these two
+pip install "nezaret[yaml,data,result]"     # everything except MONAI
 ```
 
-None of the three pulls torch. nibabel and pydicom are pure Python on top of
-numpy, so `nezaret[data]` is a few MB.
+None of these pulls torch. nibabel and pydicom are pure Python on top of
+numpy; scipy is the largest, at a few tens of MB.
 
 Compressed DICOM (JPEG, JPEG 2000, JPEG-LS) also needs a decoder for the
 voxel checks, e.g. `pip install pylibjpeg pylibjpeg-libjpeg pylibjpeg-openjpeg`.
@@ -72,18 +73,18 @@ pytest tests/test_live_monai.py -v
 ## Offline or behind a slow connection
 
 Because the core has no dependencies, the wheel is the whole install (about
-60 KB). On any machine with access to PyPI:
+75 KB). On any machine with access to PyPI:
 
 ```bash
 pip download nezaret --no-deps -d wheels/
 pip download pyyaml --no-deps -d wheels/      # optional, for YAML bundles
-pip download numpy nibabel pydicom -d wheels/  # optional, for nezaret data (pick your platform's numpy)
+pip download numpy nibabel pydicom scipy -d wheels/  # optional, for data and result (pick your platform's wheels)
 ```
 
 Copy `wheels/` across and:
 
 ```bash
-pip install --no-index --find-links wheels/ nezaret pyyaml nibabel pydicom
+pip install --no-index --find-links wheels/ nezaret pyyaml nibabel pydicom scipy
 ```
 
 ---

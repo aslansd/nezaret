@@ -16,12 +16,15 @@ from pathlib import Path
 import monai
 from monai.bundle.config_item import ComponentLocator
 
+from nezaret.knowledge import ENV_DEPENDENT_COMPONENTS
+
 OUT = Path(__file__).resolve().parent.parent / "src" / "nezaret" / "data" / "monai_components.json"
 
 
 def main():
     loc = ComponentLocator()
-    names = sorted(loc._find_classes_or_functions(loc._find_module_names()))
+    names = sorted(set(loc._find_classes_or_functions(loc._find_module_names()))
+                   - ENV_DEPENDENT_COMPONENTS)
     old = json.loads(OUT.read_text()) if OUT.exists() else {"names": [], "monai_version": "none"}
     added = sorted(set(names) - set(old["names"]))
     removed = sorted(set(old["names"]) - set(names))

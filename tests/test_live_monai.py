@@ -57,7 +57,9 @@ def test_shipped_component_list_matches_installed():
         pytest.skip(f"shipped list is for MONAI {version}, installed {monai.__version__}")
     from monai.bundle.config_item import ComponentLocator
     loc = ComponentLocator()
-    assert set(loc._find_classes_or_functions(loc._find_module_names())) == set(shipped)
+    installed = set(loc._find_classes_or_functions(loc._find_module_names()))
+    # names MONAI defines only when an optional package is missing vary by environment
+    assert installed - K.ENV_DEPENDENT_COMPONENTS == set(shipped)
 
 
 def test_resolver_agrees_with_monai_config_parser():

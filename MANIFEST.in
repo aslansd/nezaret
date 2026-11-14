@@ -4,6 +4,7 @@ include INSTALL.md
 include TESTING.md
 include PUBLISHING.md
 include TROUBLESHOOTING.md
+include VALIDATION.md
 include ROADMAP.md
 include CHANGELOG.md
 include src/nezaret/data/*.json

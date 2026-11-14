@@ -2410,7 +2410,6 @@
 "torch_profiler_time_cpu_gpu",
 "torch_profiler_time_end_to_end",
 "torchvision_zscore_norm",
-"tqdm",
 "train_mode",
 "trt_compile",
 "trt_export",

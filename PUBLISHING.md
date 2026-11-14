@@ -11,7 +11,7 @@ pip install build twine
 
 ```bash
 # src/nezaret/__version__.py
-__version__ = "0.2.1"
+__version__ = "0.3.1"
 ```
 
 `tests/test_cli.py::test_installed_version_matches_source` fails if the
@@ -25,12 +25,15 @@ finished.
 **3. Verify.**
 
 ```bash
-pytest -q                                            # 117 passed, 3 skipped with MONAI
-NEZARET_MODEL_ZOO=/tmp/model-zoo/models pytest -q    # 120 passed
+pytest -q                                            # 145 passed, 3 skipped with MONAI and MedPy
+NEZARET_MODEL_ZOO=/tmp/model-zoo/models pytest -q    # 148 passed
 nezaret lint examples/faulty_bundle                  # 5 errors, 3 warnings, 1 info
 python examples/make_faulty_dataset.py /tmp/fd
 nezaret data /tmp/fd/dataset.json --patient-id-regex "(p\d{3})" --site-regex "(site[A-Z])"
-                                                     # 7 errors, 3 warnings, 1 info
+                                                     # 8 errors, 2 warnings, 1 info
+python examples/make_faulty_results.py /tmp/fr
+nezaret result --labels /tmp/fr/labels --pred unet=/tmp/fr/unet --pred swin=/tmp/fr/swin
+                                                     # 3 errors, 7 warnings, 0 info
 nezaret doctor
 ```
 
@@ -51,18 +54,18 @@ zero-dependency promise; it caught a numpy import in 0.2.0 before release:
 ```bash
 python -m venv /tmp/check
 /tmp/check/bin/pip install dist/nezaret-*.whl pytest
-/tmp/check/bin/nezaret doctor            # must say "2446 component names"
+/tmp/check/bin/nezaret doctor            # must say "2445 component names"
 mkdir /tmp/sd && tar xzf dist/nezaret-*.tar.gz -C /tmp/sd
-cd /tmp/sd/nezaret-* && /tmp/check/bin/python -m pytest -q    # 79 passed, 7 skipped: nothing but pytest
-/tmp/check/bin/pip install pyyaml numpy nibabel pydicom
-/tmp/check/bin/python -m pytest -q                           # 105 passed, 5 skipped
+cd /tmp/sd/nezaret-* && /tmp/check/bin/python -m pytest -q    # 80 passed, 9 skipped: nothing but pytest
+/tmp/check/bin/pip install pyyaml numpy nibabel pydicom scipy
+/tmp/check/bin/python -m pytest -q                           # 129 passed, 9 skipped
 ```
 
 **6. Upload.**
 
 ```bash
 python -m twine upload dist/*
-git tag v0.2.1 && git push --tags
+git tag v0.3.1 && git push --tags
 ```
 
 **7. Confirm.** pip caches the index page and PyPI's CDN takes a minute or two,
@@ -73,6 +76,16 @@ pip install --no-cache-dir -U nezaret
 ```
 
 ---
+
+## When MONAI or MedPy releases
+
+For MedPy, and for MONAI's metrics, run `pytest tests/test_live_metrics.py -v`
+with the new version. A failure means a library changed how it computes Dice,
+HD95 or ASSD: update the convention in `src/nezaret/result/metrics.py`, say
+which version changed what in the changelog, and keep the old convention as a
+variant, since papers computed with the old version still exist.
+
+The rest of this section is about MONAI's transforms.
 
 ## When MONAI releases
 
@@ -108,7 +121,7 @@ list automatically.
 These come from publishing nezaret's sibling packages.
 
 **A version number can never be reused**, not even after deleting the release.
-If 0.2.1 turns out wrong, ship 0.2.2.
+If 0.3.1 turns out wrong, ship 0.3.2.
 
 **`pip install --no-cache-dir`** when verifying. Without it you will see the
 previous version and conclude the upload failed.
@@ -144,10 +157,12 @@ licence file present.
 
 - [ ] `pytest -q` green with nothing installed, with `[dev]`, and with MONAI
 - [ ] model-zoo regression test green against a fresh clone
-- [ ] `nezaret lint examples/faulty_bundle` and the `nezaret data` example match the README
-- [ ] wheel installed into a clean venv, `nezaret doctor` reports 2446 names
+- [ ] `nezaret lint examples/faulty_bundle`, the `nezaret data` and the `nezaret result` examples match the README
+- [ ] `tests/test_live_metrics.py` green with MONAI and MedPy installed
+- [ ] wheel installed into a clean venv, `nezaret doctor` reports 2445 names
 - [ ] README renders correctly on the live PyPI page
 - [ ] **nezaret run on your own MONAI work and on a real dataset, and every finding read**
+      (VALIDATION.md records the runs so far; add a section for each new one)
 - [ ] `git tag && git push --tags`
 
 The second-to-last item is the one that matters. A linter earns trust by what

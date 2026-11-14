@@ -51,7 +51,9 @@ def test_faulty_example_every_rule(tmp_path):
     r = nezaret.check_data(mfd.build(tmp_path / "f"), **REGEX)
     assert rules_of(r) == sorted(["NZ201", "NZ201", "NZ202", "NZ203", "NZ204", "NZ205",
                                   "NZ206", "NZ206", "NZ207", "NZ207", "NZ208"])
-    assert r.counts() == {"error": 7, "warning": 3, "info": 1}
+    assert r.counts() == {"error": 8, "warning": 2, "info": 1}
+    # both planted copies are the same scan (one exact, one rescaled), so both are errors
+    assert [f.severity for f in r.findings if f.rule == "NZ207"] == ["error", "error"]
 
 
 def test_faulty_example_without_path_hints(tmp_path):
@@ -164,7 +166,7 @@ def test_nz205_per_fold(tmp_path):
 
 # --- NZ207 duplicates -------------------------------------------------------------------------
 
-def test_nz207_exact_and_near(tmp_path):
+def test_nz207_exact_and_rescaled_copies_form_one_group(tmp_path):
     i, _ = mfd.phantom(20)
     save(i, tmp_path / "a.nii.gz")
     save(i, tmp_path / "a_copy.nii.gz")
@@ -172,16 +174,69 @@ def test_nz207_exact_and_near(tmp_path):
     dl = datalist(tmp_path, {"training": [{"image": "a.nii.gz"}],
                              "testing": [{"image": "a_copy.nii.gz"}, {"image": "a_rescaled.nii.gz"}]})
     r = nezaret.check_data(dl)
-    # exactly two: the exact pair is not reported again as a near-duplicate
-    assert sorted((f.rule, f.severity) for f in r.findings) == [("NZ207", "error"), ("NZ207", "warning")]
+    [f] = r.findings
+    assert (f.rule, f.severity) == ("NZ207", "error") and "identical voxels" in f.message
+    [g] = r.stats["duplicate_groups"]
+    assert len(g["images"]) == 3 and g["kind"] == "exact" and g["splits"] == ["training", "testing"]
 
 
-def test_nz207_within_one_split_is_not_reported(tmp_path):
-    i, _ = mfd.phantom(21)
-    save(i, tmp_path / "a.nii.gz")
-    save(i, tmp_path / "b.nii.gz")
-    dl = datalist(tmp_path, {"training": [{"image": "a.nii.gz"}, {"image": "b.nii.gz"}]})
-    assert nezaret.check_data(dl).findings == []
+def test_nz207_within_one_split_is_a_summary_warning(tmp_path):
+    entries = []
+    for k in range(3):
+        i, _ = mfd.phantom(40 + k)
+        save(i, tmp_path / f"s{k}.nii.gz")
+        save(i.astype(np.float32) * 1.7, tmp_path / f"s{k}_again.nii.gz")
+        entries += [{"image": f"s{k}.nii.gz"}, {"image": f"s{k}_again.nii.gz"}]
+    i, _ = mfd.phantom(50)
+    save(i, tmp_path / "unique.nii.gz")
+    entries.append({"image": "unique.nii.gz"})
+    r = nezaret.check_data(datalist(tmp_path, {"training": entries}))
+    [f] = r.findings                                   # one summary, not one per pair
+    assert (f.rule, f.severity) == ("NZ207", "warning")
+    assert "'training' holds 3 group(s)" in f.message and "6 images; 3 group(s) are the same scan" in f.message
+    assert len(r.stats["duplicate_groups"]) == 3
+    assert "split by group" in f.message
+
+
+def test_nz207_duplicates_inside_a_test_split_say_why_that_matters(tmp_path):
+    i, _ = mfd.phantom(60)
+    save(i, tmp_path / "t1.nii.gz")
+    save(i.astype(np.float32) * 2, tmp_path / "t1_again.nii.gz")
+    r = nezaret.check_data(datalist(tmp_path, {"test": [{"image": "t1.nii.gz"},
+                                                        {"image": "t1_again.nii.gz"}]}))
+    [f] = r.findings
+    assert "counts twice in the mean score" in f.message and "split by group" not in f.message
+
+
+def _atlas_cohort(tmp_path, rng):
+    """BraTS-like: every subject aligned to one template, so different subjects correlate highly."""
+    from scipy import ndimage
+    template = ndimage.gaussian_filter(rng.normal(size=(32, 32, 24)), 3) * 40 + 200
+    def subject(sd):
+        return template + ndimage.gaussian_filter(rng.normal(size=template.shape), 2) * sd
+    return template, subject
+
+
+def test_nz207_brats_like_patterns(tmp_path):
+    """The three patterns MSD Task01 showed, plus unrelated subjects that must not group."""
+    rng = np.random.default_rng(3)
+    _, subject = _atlas_cohort(tmp_path, rng)
+    tr, ts = [], []
+    def add(lst, name, img):
+        save(img.astype(np.float32), tmp_path / f"{name}.nii.gz")
+        lst.append({"image": f"{name}.nii.gz"})
+    base = [subject(10) for _ in range(6)]           # different subjects correlate ~0.9, as in BraTS
+    for k, img in enumerate(base):
+        add(tr, f"sub{k}", img)                      # unrelated subjects: no group
+    add(ts, "sub0_reexport", base[0] * 1.3 + 5)      # the same scan re-normalised, in test
+    from scipy import ndimage
+    follow = base[1] + ndimage.gaussian_filter(np.random.default_rng(9).normal(size=base[1].shape), 2) * 2
+    add(ts, "sub1_followup", follow)
+    r = nezaret.check_data(datalist(tmp_path, {"training": tr, "testing": ts}))
+    kinds = sorted((f.severity, f.message.split(" across")[0][:20]) for f in r.findings if f.rule == "NZ207")
+    assert [k[0] for k in kinds] == ["error", "warning"]
+    assert {len(g["images"]) for g in r.stats["duplicate_groups"]} == {2}
+    assert len(r.stats["duplicate_groups"]) == 2   # the six unrelated subjects stay apart
 
 
 def test_nz207_threshold_and_constant_images(tmp_path):

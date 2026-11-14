@@ -148,3 +148,16 @@ def test_data_rules_are_listed_and_explained(capsys):
     for rid in ("NZ201", "NZ204", "NZ208"):
         assert rid in out
     assert "Split by patient" in out
+
+
+def test_result_without_imaging_libraries_is_a_note(tmp_path, monkeypatch, capsys):
+    import sys
+    for mod in ("nibabel", "numpy", "scipy"):
+        monkeypatch.setitem(sys.modules, mod, None)   # import now raises ImportError
+    for d in ("lab", "p"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "c1.nii.gz").write_bytes(b"never read")
+    r = nezaret.check_results(tmp_path / "lab", {"m": tmp_path / "p"})
+    assert r.findings == [] and r.cases == 0
+    assert any("pip install nezaret[result]" in n for n in r.notes)
+    assert main(["result", "--labels", str(tmp_path / "lab"), "--pred", f"m={tmp_path / 'p'}"]) == 2
