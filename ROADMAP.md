@@ -1,20 +1,12 @@
 # Roadmap
 
-<<<<<<< HEAD
-*Last revised 14 November 2026, against nezaret 0.3.0.*
-=======
 *Last revised 16 November 2026, against nezaret 0.3.1.*
->>>>>>> 9569bd8 (0.3.1)
 
 ---
 
 ## Where this stands
 
-<<<<<<< HEAD
-**0.3.0**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
-=======
 **0.3.1**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
->>>>>>> 9569bd8 (0.3.1)
 **twenty-six rules** (eleven for pipelines, eight for data, seven for
 results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 
