@@ -6,7 +6,7 @@
 
 ## Where this stands
 
-**0.3.1**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
+**0.3.1** (on PyPI and GitHub, 16 November 2026), Apache 2.0, **zero runtime dependencies**, **148 tests**,
 **twenty-six rules** (eleven for pipelines, eight for data, seven for
 results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 
@@ -15,7 +15,7 @@ results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 | `nezaret lint`: bundle configs, JSON and YAML, static `@`/`%`/`$@a + @b` resolution | shipped |
 | `lint_compose()` on live MONAI pipelines | shipped |
 | Run over all 37 model-zoo bundles, every error read by hand | done, see README |
-| Upstream reports for the model-zoo findings | **drafted in [upstream/](upstream/README.md), not filed yet, see §1** |
+| Upstream reports for the model-zoo findings | **1 of 4 filed ([#802](https://github.com/Project-MONAI/model-zoo/issues/802)), the rest drafted in [upstream/](upstream/README.md), see §1** |
 | `nezaret data`: datalist + NIfTI/DICOM checks (0.2.0) | shipped, §2 |
 | `nezaret data` on real cohorts: MSD Task09 and Task01 | done, [VALIDATION.md](VALIDATION.md) |
 | `nezaret result`: re-scoring under every convention, bootstrap, ranking (0.3.0) | shipped, §3 |
@@ -67,16 +67,18 @@ to 1.6.1. That check added two things the lint output alone did not show:
 | 1 | `prostate_mri_anatomy` | label interpolated in `RandAffined`/`Rand3DElasticd`/`RandZoomd`; `RandZoomd` `min`/`max` crash on ≥ 1.5.1; `Invertd` with `nearest_interp: false` after `AsDiscreted` | — | — | drafted |
 | 2 | `renalStructures_CECT_segmentation` | training RAS, `inference.json` LPS; `RandZoomd` label mode; `download_data` 404 (Yandex link gone) | done 16 Nov: `FLIPPED x,y` on Task09 `spleen_10`; Yandex link dead in browser too | — | ready to file |
 | 3 | `wholeBrainSeg_Large_UNEST_segmentation` | move `NormalizeIntensityd` into `deterministic_transforms` so validation normalises | read model-zoo #534 and discussion #557 | — | drafted |
-| 4 | `mednist_reg` | `IgniteMetric` → `IgniteMetricHandler` (removed in 1.4; training does not start) | — | — | drafted |
+| 4 | `mednist_reg` | `IgniteMetric` → `IgniteMetricHandler` (removed in 1.4; training does not start) | — | [#802](https://github.com/Project-MONAI/model-zoo/issues/802) | **filed 16 Nov**, no reply yet |
 | 5 | MONAI core | `Zoom`/`RandZoom` should reject unknown `**kwargs` at construction | file after #1, link it | — | optional |
 
-Order: 4, 1, 3, 2, then 5. Search for duplicates first; the session that
+Order: 4 (filed), then 1, 3, 2 and 5, one at a time. Waiting for a maintainer
+reply on #802 before the next is fine: the reply shows how they like reports
+and whether they want PRs. Search for duplicates first; the session that
 drafted these could not query GitHub. Offer PRs rather than opening them
 unasked; a model-zoo PR needs a `metadata.json` version bump and changelog
 line.
 
-**Announcing.** After the issues exist (about a week, or after a maintainer
-replies):
+**Announcing.** After all four issues exist, and about a week after the last
+one or once a maintainer replies:
 
 1. a post in Project-MONAI/MONAI Discussions (draft in upstream/README.md);
 2. a two-line pointer on each affected bundle's Hugging Face page, since that

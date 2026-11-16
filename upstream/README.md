@@ -7,7 +7,7 @@ Issue drafts for the faults that `nezaret lint` found in the MONAI Model Zoo at 
 | 1 | [01-prostate_mri_anatomy.md](01-prostate_mri_anatomy.md) | Project-MONAI/model-zoo | no |
 | 2 | [02-renalStructures_CECT_segmentation.md](02-renalStructures_CECT_segmentation.md) | Project-MONAI/model-zoo | done: check run on Task09, link confirmed dead |
 | 3 | [03-wholeBrainSeg_Large_UNEST_segmentation.md](03-wholeBrainSeg_Large_UNEST_segmentation.md) | Project-MONAI/model-zoo | read #534 and discussion #557 first |
-| 4 | [04-mednist_reg.md](04-mednist_reg.md) | Project-MONAI/model-zoo | no |
+| 4 | [04-mednist_reg.md](04-mednist_reg.md) | Project-MONAI/model-zoo | filed: [#802](https://github.com/Project-MONAI/model-zoo/issues/802) |
 | 5 | [05-monai-core-zoom-kwargs.md](05-monai-core-zoom-kwargs.md) | Project-MONAI/MONAI | optional; file after #1 and fill in its number |
 
 ## How to file
