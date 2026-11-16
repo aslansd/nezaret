@@ -1,12 +1,20 @@
 # Roadmap
 
+<<<<<<< HEAD
 *Last revised 14 November 2026, against nezaret 0.3.0.*
+=======
+*Last revised 16 November 2026, against nezaret 0.3.1.*
+>>>>>>> 9569bd8 (0.3.1)
 
 ---
 
 ## Where this stands
 
+<<<<<<< HEAD
 **0.3.0**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
+=======
+**0.3.1**, Apache 2.0, **zero runtime dependencies**, **148 tests**,
+>>>>>>> 9569bd8 (0.3.1)
 **twenty-six rules** (eleven for pipelines, eight for data, seven for
 results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 
@@ -15,7 +23,7 @@ results), checked against MONAI 1.6.1 and MedPy 0.5.2.
 | `nezaret lint`: bundle configs, JSON and YAML, static `@`/`%`/`$@a + @b` resolution | shipped |
 | `lint_compose()` on live MONAI pipelines | shipped |
 | Run over all 37 model-zoo bundles, every error read by hand | done, see README |
-| Upstream reports for the model-zoo findings | **not filed yet, see §1** |
+| Upstream reports for the model-zoo findings | **drafted in [upstream/](upstream/README.md), not filed yet, see §1** |
 | `nezaret data`: datalist + NIfTI/DICOM checks (0.2.0) | shipped, §2 |
 | `nezaret data` on real cohorts: MSD Task09 and Task01 | done, [VALIDATION.md](VALIDATION.md) |
 | `nezaret result`: re-scoring under every convention, bootstrap, ranking (0.3.0) | shipped, §3 |
@@ -40,24 +48,53 @@ tests/test_model_zoo.py     3   (opt-in: NEZARET_MODEL_ZOO)
 
 ## 1. The upstream findings: file them first
 
-Running 0.1.0 over the model zoo found four bundles with faults that change
-results without raising an error (README, "What it found"). Each is a small,
-checkable report, and filing them is worth more than any feature below: a
-merged fix is public evidence that the rules find real things, which is the
-case for the package.
+Running nezaret over the model zoo found four bundles with faults that change
+results, mostly without an error. Filing them is worth more than any feature
+below: a merged fix is public evidence that the rules find real things, which
+is the case for the package.
 
-| Bundle | Report |
-|---|---|
-| `prostate_mri_anatomy` | `RandAffined`/`Rand3DElasticd`/`RandZoomd` need `mode` with `nearest` for the label; `Invertd` should come before `AsDiscreted` in inference |
-| `renalStructures_CECT_segmentation` | `RandZoomd` label mode; training is RAS (`as_closest_canonical`), inference reorients to LPS |
-| `wholeBrainSeg_Large_UNEST_segmentation` | move `NormalizeIntensityd` into `deterministic_transforms` so validation normalises |
-| `mednist_reg` | `IgniteMetric` → `IgniteMetricHandler` |
+**Drafts are ready** in [upstream/](upstream/README.md). There is one issue per
+bundle, each with permalinked config lines, a reproduction that has been run,
+the one-line fix, and nezaret mentioned only at the end. Everything was
+re-checked on 16 November 2026 against model-zoo `feb2e8c` and MONAI 1.4.0
+to 1.6.1. That check added two things the lint output alone did not show:
 
-One issue per bundle, each with the config lines and the one-line fix, and
-**without** leading with nezaret. Mention it at the end as how the fault was
-found. Before filing the orientation one, check by loading one case both ways
-that the axes really differ; it is the only finding not visible from the
-config alone.
+- `prostate_mri_anatomy`'s `RandZoomd` uses `min`/`max` instead of
+  `min_zoom`/`max_zoom`. It is harmless up to MONAI 1.5.0, but from 1.5.1 every
+  zoom below 1 raises `ValueError`, so training stops in the first epoch. This
+  gives a fifth, optional, issue against MONAI itself: unknown keyword
+  arguments should be rejected at construction.
+- The renal orientation mismatch holds for **any** file: training always ends
+  in RAS (`as_closest_canonical`), inference always in LPS. The bundle README
+  says the data is stored in LPS, which does not change this.
+  `tools/check_orientation.py` shows it on one case (`FLIPPED x,y`, or `SAME`
+  once inference uses RAS).
+
+| # | Bundle | Report | Before filing | Issue | Status |
+|---|---|---|---|---|---|
+| 1 | `prostate_mri_anatomy` | label interpolated in `RandAffined`/`Rand3DElasticd`/`RandZoomd`; `RandZoomd` `min`/`max` crash on ≥ 1.5.1; `Invertd` with `nearest_interp: false` after `AsDiscreted` | — | — | drafted |
+| 2 | `renalStructures_CECT_segmentation` | training RAS, `inference.json` LPS; `RandZoomd` label mode; `download_data` 404 (Yandex link gone) | done 16 Nov: `FLIPPED x,y` on Task09 `spleen_10`; Yandex link dead in browser too | — | ready to file |
+| 3 | `wholeBrainSeg_Large_UNEST_segmentation` | move `NormalizeIntensityd` into `deterministic_transforms` so validation normalises | read model-zoo #534 and discussion #557 | — | drafted |
+| 4 | `mednist_reg` | `IgniteMetric` → `IgniteMetricHandler` (removed in 1.4; training does not start) | — | — | drafted |
+| 5 | MONAI core | `Zoom`/`RandZoom` should reject unknown `**kwargs` at construction | file after #1, link it | — | optional |
+
+Order: 4, 1, 3, 2, then 5. Search for duplicates first; the session that
+drafted these could not query GitHub. Offer PRs rather than opening them
+unasked; a model-zoo PR needs a `metadata.json` version bump and changelog
+line.
+
+**Announcing.** After the issues exist (about a week, or after a maintainer
+replies):
+
+1. a post in Project-MONAI/MONAI Discussions (draft in upstream/README.md);
+2. a two-line pointer on each affected bundle's Hugging Face page, since that
+   is where the bundles are downloaded from now;
+3. a longer write-up on your own channels.
+
+Fill in the Issue column as they are filed, and change Status to
+`filed` / `acknowledged` / `fixed in <bundle version>`. A follow-up for the
+linter: rule for unknown arguments to a `_target_` (NZ112), which would have
+caught `min`/`max` directly (see "Smaller things").
 
 ---
 
@@ -134,6 +171,12 @@ Check the v2 file layout against a current install before writing anything.
   `_nezaret_ignore_` key in a transform dict would break the bundle. A
   `nezaret.toml` next to `configs/` with per-location ignores is the likely
   shape.
+- **NZ112: unknown arguments to a `_target_`.** Compare a transform dict's keys
+  with the class signature. `RandZoomd(min=…, max=…)` in `prostate_mri_anatomy`
+  passes MONAI's construction checks because the keys go into `**kwargs`, then
+  crashes during training on MONAI ≥ 1.5.1. The rule needs the signatures
+  shipped beside `monai_components.json`, and needs care where `**kwargs` is
+  genuinely forwarded.
 - **SARIF output**, so GitHub shows findings on the pull request diff.
 - **A daftar adapter**: record the lint verdict of the bundle a run used, so
   a result carries "pipeline checked by nezaret 0.1.0, 0 errors" in its

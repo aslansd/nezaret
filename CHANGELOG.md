@@ -1,5 +1,28 @@
 # Changelog
 
+<<<<<<< HEAD
+=======
+## 0.3.1: upstream reports
+
+No change to the rules or the commands; the lint, data and result output is
+the same as 0.3.0.
+
+- **Upstream reports drafted** in `upstream/`: four Model Zoo issues
+  (`prostate_mri_anatomy`, `renalStructures_CECT_segmentation`,
+  `wholeBrainSeg_Large_UNEST_segmentation`, `mednist_reg`) and one optional
+  MONAI issue, with permalinked config lines, reproductions that were run, and
+  one-line fixes. All re-checked against MONAI 1.4.0, 1.5.0, 1.5.1, 1.5.2 and
+  1.6.1. `upstream/README.md` says where to file them and where to announce.
+- The re-check found that `prostate_mri_anatomy`'s `RandZoomd(min=…, max=…)`
+  is silently ignored up to MONAI 1.5.0 and crashes training from 1.5.1, and
+  that the renal RAS/LPS mismatch holds for any input file.
+- **New tool** `tools/check_orientation.py`: loads a file the way a training
+  config and an inference config do, and says whether the network sees the
+  same array (`SAME`, `FLIPPED x,y`, `DIFFERENT`).
+- ROADMAP §1 now tracks each report (issue URL, status) and the announcement
+  plan; a rule for unknown `_target_` arguments (NZ112) is added to the list.
+
+>>>>>>> 9569bd8 (0.3.1)
 ## 0.3.0: `nezaret result`
 
 **`nezaret result` asks whether a segmentation result survives the scoring
