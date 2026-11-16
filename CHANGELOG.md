@@ -1,7 +1,5 @@
 # Changelog
 
-<<<<<<< HEAD
-=======
 ## 0.3.1: upstream reports
 
 No change to the rules or the commands; the lint, data and result output is
@@ -22,7 +20,6 @@ the same as 0.3.0.
 - ROADMAP §1 now tracks each report (issue URL, status) and the announcement
   plan; a rule for unknown `_target_` arguments (NZ112) is added to the list.
 
->>>>>>> 9569bd8 (0.3.1)
 ## 0.3.0: `nezaret result`
 
 **`nezaret result` asks whether a segmentation result survives the scoring
